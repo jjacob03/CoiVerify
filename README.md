@@ -1,34 +1,34 @@
-# Insurance API — Certificate of Insurance (COI) parsing & validation
+# CoiVerify — Certificate of Insurance (COI) parsing & validation
 
-A .NET 10 modular monolith: one ASP.NET Core API host (`InsuranceApi.Api`) over two
-class libraries (`InsuranceApi.Domain`, `InsuranceApi.Infrastructure`). Not split into
+A .NET 10 modular monolith: one ASP.NET Core API host (`CoiVerify.Api`) over two
+class libraries (`CoiVerify.Domain`, `CoiVerify.Infrastructure`). Not split into
 real microservices on purpose — see the "Why one deployable, not microservices"
 section below.
 
 ## Solution layout
 
 ```
-InsuranceApi.slnx
+CoiVerify.slnx
 src/
-  InsuranceApi.Domain/          Schema (CertificateOfInsurance, CoverageLine),
+  CoiVerify.Domain/          Schema (CertificateOfInsurance, CoverageLine),
                                  rules engine contracts (IRulesEvaluator), and the
                                  extraction contract (IDocumentExtractor). No
                                  dependencies on anything else in the solution.
-  InsuranceApi.Infrastructure/  DefaultRulesEvaluator (the generic validation
+  CoiVerify.Infrastructure/  DefaultRulesEvaluator (the generic validation
                                  engine) + two IDocumentExtractor implementations:
                                  StubDocumentExtractor (fake data, used today) and
                                  AzureDocumentExtractor (real pipeline, not wired up
                                  yet - see below).
-  InsuranceApi.Api/             Program.cs - minimal API exposing /health, /parse,
+  CoiVerify.Api/             Program.cs - minimal API exposing /health, /parse,
                                  /validate.
 tests/
-  InsuranceApi.Tests/           Hand-rolled test runner (see "About the tests").
+  CoiVerify.Tests/           Hand-rolled test runner (see "About the tests").
 ```
 
 ## Running it
 
 ```
-cd src/InsuranceApi.Api
+cd src/CoiVerify.Api
 dotnet run
 ```
 
@@ -58,7 +58,7 @@ LLM.
 
 ## Wiring up real extraction
 
-`AzureDocumentExtractor` (in `InsuranceApi.Infrastructure`) is the real
+`AzureDocumentExtractor` (in `CoiVerify.Infrastructure`) is the real
 implementation: Azure AI Document Intelligence's `prebuilt-layout` model for OCR,
 then an LLM call to map the OCR text into the `CertificateOfInsurance` schema. It's
 written but not registered in `Program.cs` yet. To turn it on:
@@ -97,7 +97,7 @@ only method that would need to change.
 
 ## About the tests
 
-`tests/InsuranceApi.Tests` is a plain console app with a small hand-rolled
+`tests/CoiVerify.Tests` is a plain console app with a small hand-rolled
 assertion runner (`Run`/`Assert`), not xUnit or MSTest. That's not a style
 preference - the sandbox this was built in blocks NuGet (`nuget.org` and GitHub's
 NuGet proxy both return 403 from the egress policy), and every real .NET test
@@ -105,7 +105,7 @@ framework is NuGet-delivered. The whole solution was kept to zero external NuGet
 packages for the same reason, so it builds and tests fully offline here.
 
 On your own machine, with NuGet reachable, there's no reason to keep it this way -
-swap `tests/InsuranceApi.Tests` for a real xUnit project if you'd rather have
+swap `tests/CoiVerify.Tests` for a real xUnit project if you'd rather have
 `[Fact]`/`[Theory]`, richer assertions, and IDE test-runner integration. The seven
 cases in `Program.cs` translate directly to `[Fact]` methods; nothing about the
 approach depends on the hand-rolled runner.
@@ -113,7 +113,7 @@ approach depends on the hand-rolled runner.
 Run the tests:
 
 ```
-dotnet run --project tests/InsuranceApi.Tests
+dotnet run --project tests/CoiVerify.Tests
 ```
 
 ## Why one deployable, not microservices
@@ -137,7 +137,7 @@ else - the API host, the upload handling, `DefaultRulesEvaluator`'s comparison
 logic, the extraction pipeline shape (OCR call -> LLM mapping call) - is generic.
 A second product (loss run parsing, ACORD 125/130 applications, etc.) means a new
 schema type, a new extraction prompt, and new API routes, reusing everything else
-in `InsuranceApi.Infrastructure` and `InsuranceApi.Api`.
+in `CoiVerify.Infrastructure` and `CoiVerify.Api`.
 
 ## Not yet built (next steps, in rough order)
 

@@ -2,9 +2,9 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
-using InsuranceApi.Domain;
+using CoiVerify.Domain;
 
-namespace InsuranceApi.Infrastructure;
+namespace CoiVerify.Infrastructure;
 
 /// <summary>
 /// Real extraction pipeline: Azure AI Document Intelligence "prebuilt-layout" for OCR

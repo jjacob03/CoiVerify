@@ -1,6 +1,6 @@
-using InsuranceApi.Domain;
+using CoiVerify.Domain;
 
-namespace InsuranceApi.Infrastructure;
+namespace CoiVerify.Infrastructure;
 
 /// <summary>
 /// Fake extractor so the API is runnable end-to-end with no external dependencies or

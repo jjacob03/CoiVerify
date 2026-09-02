@@ -1,4 +1,4 @@
-namespace InsuranceApi.Domain;
+namespace CoiVerify.Domain;
 
 /// <summary>
 /// The structured, extracted contents of a certificate of insurance (ACORD 25 shape).

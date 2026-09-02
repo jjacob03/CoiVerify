@@ -1,4 +1,4 @@
-namespace InsuranceApi.Domain;
+namespace CoiVerify.Domain;
 
 public enum ComparisonOperator
 {

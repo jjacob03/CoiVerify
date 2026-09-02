@@ -1,7 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using InsuranceApi.Domain;
-using InsuranceApi.Infrastructure;
+using CoiVerify.Domain;
+using CoiVerify.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
 

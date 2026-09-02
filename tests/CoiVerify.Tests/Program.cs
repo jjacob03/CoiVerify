@@ -6,8 +6,8 @@
 // this file with a real xUnit/MSTest project instead - the assertions below translate
 // directly to [Fact] methods.
 
-using InsuranceApi.Domain;
-using InsuranceApi.Infrastructure;
+using CoiVerify.Domain;
+using CoiVerify.Infrastructure;
 
 var failures = new List<string>();
 var evaluator = new DefaultRulesEvaluator();

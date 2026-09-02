@@ -1,7 +1,7 @@
 using System.Globalization;
-using InsuranceApi.Domain;
+using CoiVerify.Domain;
 
-namespace InsuranceApi.Infrastructure;
+namespace CoiVerify.Infrastructure;
 
 /// <summary>
 /// Generic requirement evaluator. This is the reusable piece: every future document

@@ -1,4 +1,4 @@
-namespace InsuranceApi.Domain;
+namespace CoiVerify.Domain;
 
 /// <summary>
 /// One coverage block on the certificate (e.g. the "COMMERCIAL GENERAL LIABILITY" row

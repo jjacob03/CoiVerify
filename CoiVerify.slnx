@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/CoiVerify.Api/CoiVerify.Api.csproj" />
+    <Project Path="src/CoiVerify.Domain/CoiVerify.Domain.csproj" />
+    <Project Path="src/CoiVerify.Infrastructure/CoiVerify.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/CoiVerify.Tests/CoiVerify.Tests.csproj" />
+  </Folder>
+</Solution>
