@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using CoiVerify.Api;
 using CoiVerify.Domain;
 using CoiVerify.Infrastructure;
 
@@ -59,7 +60,8 @@ app.MapPost("/parse", async (IFormFile? file, IDocumentExtractor extractor, Canc
         ? Results.Ok(result)
         : Results.UnprocessableEntity(result);
 })
-.DisableAntiforgery();
+.DisableAntiforgery()
+.AddEndpointFilter<ApiKeyAuthFilter>();
 
 // --- POST /validate ------------------------------------------------------------------
 // multipart/form-data with a "file" field plus a "rules" field containing a
@@ -115,6 +117,7 @@ app.MapPost("/validate", async (
 
     return Results.Ok(new { extraction, validation });
 })
-.DisableAntiforgery();
+.DisableAntiforgery()
+.AddEndpointFilter<ApiKeyAuthFilter>();
 
 app.Run();

@@ -32,15 +32,22 @@ cd src/CoiVerify.Api
 dotnet run
 ```
 
+`/parse` and `/validate` require an API key (`/health` doesn't). Generate one and
+register it locally with:
+```
+dotnet user-secrets set "ApiKeys:<a random key you generate>" "local-dev"
+```
 Then, from another terminal:
 
 ```
 curl http://localhost:5264/health
 
 curl -X POST http://localhost:5264/parse \
+  -H "X-Api-Key: <your key>" \
   -F "file=@sample.pdf;type=application/pdf"
 
 curl -X POST http://localhost:5264/validate \
+  -H "X-Api-Key: <your key>" \
   -F "file=@sample.pdf;type=application/pdf" \
   -F 'rules={"rules":[
         {"field":"GeneralLiability.EachOccurrence","operator":"GreaterThanOrEqual","value":"1000000"},
@@ -48,6 +55,18 @@ curl -X POST http://localhost:5264/validate \
         {"field":"ExpirationDate","operator":"OnOrAfter","value":"today"}
       ]}'
 ```
+
+## Auth
+
+`ApiKeyAuthFilter` (in `CoiVerify.Api`) requires a valid `X-Api-Key` header on
+`/parse` and `/validate`. Keys are a flat set of shared secrets configured as
+`ApiKeys:<the key>` = `<customer name>` - user-secrets locally, App Service
+config values once deployed. This is deliberately minimal: no database, no
+per-key rate limiting or usage metering, the customer name is just for
+attribution in logs. It exists to stop the endpoints from being callable by
+anyone who finds the URL and burning Azure spend for free - not a real
+customer-facing key-issuance system yet. That's Stripe-backed and comes with
+direct billing (see "Not yet built").
 
 Right now every `/parse` and `/validate` call returns the same canned certificate
 data regardless of what you upload (`StubDocumentExtractor`) - the upload plumbing,
@@ -142,11 +161,14 @@ in `CoiVerify.Infrastructure` and `CoiVerify.Api`.
 
 ## Not yet built (next steps, in rough order)
 
-- API key auth / RapidAPI proxy header verification on `/parse` and `/validate`.
-- Stripe metered billing hookup for direct (non-RapidAPI) customers.
-- Test `AzureDocumentExtractor` against actual ACORD 25 samples once you have real
-  Azure credentials configured (blank templates are freely available - search
-  "ACORD 25 blank form pdf").
+- RapidAPI proxy header verification on `/parse` and `/validate`, once there's an
+  actual RapidAPI listing to verify against - see "Auth" above for the flat
+  shared-key check that exists today.
+- Stripe metered billing hookup for direct (non-RapidAPI) customers, including real
+  per-customer key issuance (today's keys are hand-set via user-secrets/App Service
+  config, not self-serve).
+- Public hosting - nothing is deployed anywhere yet, this only runs locally.
+- Liability disclaimer in a ToS - needs to exist before the first paying customer.
 - `GET /requirements/templates` - the prebuilt requirement-set library discussed
   as the real differentiator (general contractor subcontractor standard, property
   vendor standard, etc.).
