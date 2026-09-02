@@ -53,10 +53,12 @@ public sealed class DefaultRulesEvaluator : IRulesEvaluator
         }
 
         var limitName = parts[1];
-        if (!coverage.Limits.TryGetValue(limitName, out var actual))
+        var limitMatch = coverage.Limits.FirstOrDefault(kv => string.Equals(kv.Key, limitName, StringComparison.OrdinalIgnoreCase));
+        if (limitMatch.Key is null)
         {
             return Fail(rule, null, $"{coverageType} coverage does not report a '{limitName}' limit.");
         }
+        var actual = limitMatch.Value;
 
         if (!decimal.TryParse(rule.Value, NumberStyles.Number, CultureInfo.InvariantCulture, out var expected))
         {

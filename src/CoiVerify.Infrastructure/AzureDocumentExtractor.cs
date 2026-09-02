@@ -2,6 +2,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using CoiVerify.Domain;
 
 namespace CoiVerify.Infrastructure;
@@ -104,43 +105,90 @@ public sealed class AzureDocumentExtractor(HttpClient httpClient, AzureDocumentE
     }
 
     /// <summary>
-    /// Sends the OCR text to an LLM with instructions to return the
-    /// CertificateOfInsurance shape as JSON, and deserializes the result.
-    /// The exact request shape depends on which LLM endpoint you point this at
-    /// (Azure OpenAI chat completions, Anthropic messages API, etc.) - this method is
-    /// the one place that needs to change to switch providers.
+    /// Sends the OCR text to an Azure OpenAI chat completions deployment with
+    /// instructions to return the CertificateOfInsurance shape as JSON, and
+    /// deserializes the result. Azure OpenAI is the one provider assumed here -
+    /// swap this method (URL, auth header, request/response shape) to point at a
+    /// different provider (Anthropic messages API, OpenAI direct, etc.) instead.
     /// </summary>
     private async Task<CertificateOfInsurance> MapWithLlmAsync(string layoutText, CancellationToken cancellationToken)
     {
-        var prompt = BuildExtractionPrompt(layoutText);
+        var analyzeUrl =
+            $"{options.LlmEndpoint.TrimEnd('/')}" +
+            $"/openai/deployments/{Uri.EscapeDataString(options.LlmDeploymentName)}/chat/completions" +
+            "?api-version=2024-10-21";
 
-        using var request = new HttpRequestMessage(HttpMethod.Post, options.LlmEndpoint);
-        request.Headers.Add("Authorization", $"Bearer {options.LlmApiKey}");
+        using var request = new HttpRequestMessage(HttpMethod.Post, analyzeUrl);
+        request.Headers.Add("api-key", options.LlmApiKey);
         request.Content = new StringContent(
-            JsonSerializer.Serialize(new { prompt, response_format = "json" }),
+            JsonSerializer.Serialize(new
+            {
+                messages = new[]
+                {
+                    new { role = "system", content = ExtractionSystemPrompt },
+                    new { role = "user", content = BuildExtractionPrompt(layoutText) }
+                },
+                response_format = new { type = "json_object" },
+                temperature = 0
+            }),
             Encoding.UTF8,
             "application/json");
 
         using var response = await httpClient.SendAsync(request, cancellationToken);
         response.EnsureSuccessStatusCode();
 
-        var json = await response.Content.ReadAsStringAsync(cancellationToken);
+        var payload = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
+        var content = payload.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString()
+            ?? throw new InvalidOperationException("LLM response had no message content.");
 
-        // TODO: replace with real deserialization once the LLM endpoint/shape is
-        // chosen - the model should be prompted to emit exactly this schema.
-        return JsonSerializer.Deserialize<CertificateOfInsurance>(json)
+        return JsonSerializer.Deserialize<CertificateOfInsurance>(content, LlmResponseJsonOptions)
             ?? throw new InvalidOperationException("LLM did not return a parseable certificate.");
     }
 
-    private static string BuildExtractionPrompt(string layoutText) => $"""
-        Extract the following fields from this certificate of insurance (ACORD 25)
-        OCR text and return them as JSON matching the CertificateOfInsurance schema:
-        producer, insured, certificate holder, additional-insured and
-        waiver-of-subrogation checkboxes, and every coverage line present (General
-        Liability, Auto Liability, Umbrella, Workers Comp, Professional) with policy
-        number, carrier, effective/expiration dates, and every dollar limit shown.
-        If a field is not present on the certificate, omit it rather than guessing.
+    private static readonly JsonSerializerOptions LlmResponseJsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true,
+        Converters = { new JsonStringEnumConverter() }
+    };
 
+    private const string ExtractionSystemPrompt = """
+        You extract structured data from certificate-of-insurance (ACORD 25) OCR text.
+        Respond with a single JSON object and nothing else, matching this shape:
+        {
+          "ProducerName": string|null, "ProducerAddress": string|null,
+          "InsuredName": string|null, "InsuredAddress": string|null,
+          "CertificateHolderName": string|null, "CertificateHolderAddress": string|null,
+          "AdditionalInsured": bool, "WaiverOfSubrogation": bool,
+          "DescriptionOfOperations": string|null,
+          "Coverages": [
+            {
+              "Type": "GeneralLiability"|"AutomobileLiability"|"UmbrellaExcessLiability"
+                      |"WorkersCompEmployersLiability"|"ProfessionalLiability"|"Other",
+              "InsurerName": string|null, "InsurerLetter": string|null,
+              "PolicyNumber": string|null,
+              "EffectiveDate": "yyyy-MM-dd"|null, "ExpirationDate": "yyyy-MM-dd"|null,
+              "Limits": { "<LimitName>": number, ... }
+            }
+          ]
+        }
+        For each coverage line's "Limits", use exactly these key names for that coverage
+        type - never the certificate's own printed label text (e.g. write "EachAccident",
+        not "E.L. Each Accident"). Only include a limit key if the certificate actually
+        shows a dollar amount for it.
+          GeneralLiability: EachOccurrence, DamageToRentedPremises, MedExp,
+            PersonalAndAdvInjury, GeneralAggregate, ProductsCompOpAgg
+          AutomobileLiability: CombinedSingleLimit, BodilyInjuryPerPerson,
+            BodilyInjuryPerAccident, PropertyDamage
+          UmbrellaExcessLiability: EachOccurrence, Aggregate
+          WorkersCompEmployersLiability: EachAccident, DiseaseEachEmployee,
+            DiseasePolicyLimit
+          ProfessionalLiability: EachClaim, Aggregate
+          Other: use your best judgment - there's no fixed set for this one.
+        Only include a coverage line if the certificate actually shows it. Omit fields
+        you can't find rather than guessing at a value.
+        """;
+
+    private static string BuildExtractionPrompt(string layoutText) => $"""
         OCR TEXT:
         {layoutText}
         """;
@@ -152,4 +200,5 @@ public sealed class AzureDocumentExtractorOptions
     public required string DocumentIntelligenceKey { get; init; }
     public required string LlmEndpoint { get; init; }
     public required string LlmApiKey { get; init; }
+    public required string LlmDeploymentName { get; init; }
 }

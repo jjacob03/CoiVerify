@@ -60,33 +60,34 @@ LLM.
 
 `AzureDocumentExtractor` (in `CoiVerify.Infrastructure`) is the real
 implementation: Azure AI Document Intelligence's `prebuilt-layout` model for OCR,
-then an LLM call to map the OCR text into the `CertificateOfInsurance` schema. It's
-written but not registered in `Program.cs` yet. To turn it on:
+then an Azure OpenAI chat completion to map the OCR text into the
+`CertificateOfInsurance` schema. `Program.cs` registers it automatically whenever
+`DocIntel:Endpoint` is configured, and falls back to `StubDocumentExtractor`
+otherwise - so the app still runs with zero setup, and picks up real extraction the
+moment credentials exist. To turn it on:
 
-1. Create an Azure AI Document Intelligence resource, get its endpoint + key.
-2. Pick an LLM endpoint (Azure OpenAI, OpenAI, Anthropic, etc.) and get its
-   endpoint + key. `MapWithLlmAsync` in `AzureDocumentExtractor.cs` has a `// TODO`
-   at the exact spot to adjust the request/response shape for whichever provider
-   you choose.
-3. In `Program.cs`, replace:
-   ```csharp
-   builder.Services.AddSingleton<IDocumentExtractor, StubDocumentExtractor>();
+1. Create an Azure AI Document Intelligence resource (the free F0 tier covers
+   500 pages/month), get its endpoint + key.
+2. Create an Azure OpenAI resource, deploy a chat-completion model to it (a small
+   model is plenty for this), and note the resource endpoint, the deployment name,
+   and a key.
+3. Set the five config values via `dotnet user-secrets` (recommended for local dev
+   - keeps keys out of source control) from `src/CoiVerify.Api`:
    ```
-   with:
-   ```csharp
-   builder.Services.AddHttpClient<AzureDocumentExtractor>();
-   builder.Services.AddSingleton(new AzureDocumentExtractorOptions
-   {
-       DocumentIntelligenceEndpoint = builder.Configuration["DocIntel:Endpoint"]!,
-       DocumentIntelligenceKey = builder.Configuration["DocIntel:Key"]!,
-       LlmEndpoint = builder.Configuration["Llm:Endpoint"]!,
-       LlmApiKey = builder.Configuration["Llm:Key"]!
-   });
-   builder.Services.AddSingleton<IDocumentExtractor, AzureDocumentExtractor>();
+   dotnet user-secrets set "DocIntel:Endpoint" "https://<resource>.cognitiveservices.azure.com"
+   dotnet user-secrets set "DocIntel:Key" "<doc-intelligence-key>"
+   dotnet user-secrets set "Llm:Endpoint" "https://<resource>.openai.azure.com"
+   dotnet user-secrets set "Llm:Key" "<azure-openai-key>"
+   dotnet user-secrets set "Llm:DeploymentName" "<your-deployment-name>"
    ```
-   and add the four config values via `dotnet user-secrets` (recommended for local
-   dev - keeps keys out of source control) or environment variables. Don't commit
-   real keys to `appsettings.json`.
+   In deployed environments, set the same keys as environment variables
+   (`DocIntel__Endpoint`, etc.) instead. Don't commit real keys to
+   `appsettings.json`.
+
+To point this at a different LLM provider (Anthropic, OpenAI direct, etc.) instead
+of Azure OpenAI, `MapWithLlmAsync` in `AzureDocumentExtractor.cs` is the one method
+that needs to change - the URL, auth header, and request/response shape are all
+provider-specific.
 
 `AzureDocumentExtractor` is built on plain `HttpClient` + `System.Text.Json` against
 the Document Intelligence and LLM REST APIs directly, not the `Azure.AI.*` NuGet
@@ -143,9 +144,9 @@ in `CoiVerify.Infrastructure` and `CoiVerify.Api`.
 
 - API key auth / RapidAPI proxy header verification on `/parse` and `/validate`.
 - Stripe metered billing hookup for direct (non-RapidAPI) customers.
-- Swap `StubDocumentExtractor` for `AzureDocumentExtractor` once you have real
-  credentials, and test against actual ACORD 25 samples (blank templates are
-  freely available - search "ACORD 25 blank form pdf").
+- Test `AzureDocumentExtractor` against actual ACORD 25 samples once you have real
+  Azure credentials configured (blank templates are freely available - search
+  "ACORD 25 blank form pdf").
 - `GET /requirements/templates` - the prebuilt requirement-set library discussed
   as the real differentiator (general contractor subcontractor standard, property
   vendor standard, etc.).

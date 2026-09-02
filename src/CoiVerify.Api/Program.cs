@@ -13,9 +13,29 @@ builder.Services.ConfigureHttpJsonOptions(options =>
     options.SerializerOptions.WriteIndented = false;
 });
 
-// Swap StubDocumentExtractor for AzureDocumentExtractor once real OCR/LLM
-// credentials are configured - see README.md "Wiring up real extraction".
-builder.Services.AddSingleton<IDocumentExtractor, StubDocumentExtractor>();
+// Real extraction pipeline: Azure AI Document Intelligence for OCR, then an Azure
+// OpenAI chat completion to map that text into the CertificateOfInsurance schema.
+// Config comes from user-secrets locally (dotnet user-secrets set "DocIntel:Endpoint" ...)
+// or environment variables in deployed environments - see README.md "Wiring up real
+// extraction". Falls back to StubDocumentExtractor if DocIntel:Endpoint isn't configured,
+// so the app still runs out of the box without credentials.
+if (!string.IsNullOrWhiteSpace(builder.Configuration["DocIntel:Endpoint"]))
+{
+    builder.Services.AddHttpClient<AzureDocumentExtractor>();
+    builder.Services.AddSingleton(new AzureDocumentExtractorOptions
+    {
+        DocumentIntelligenceEndpoint = builder.Configuration["DocIntel:Endpoint"]!,
+        DocumentIntelligenceKey = builder.Configuration["DocIntel:Key"]!,
+        LlmEndpoint = builder.Configuration["Llm:Endpoint"]!,
+        LlmApiKey = builder.Configuration["Llm:Key"]!,
+        LlmDeploymentName = builder.Configuration["Llm:DeploymentName"]!
+    });
+    builder.Services.AddSingleton<IDocumentExtractor, AzureDocumentExtractor>();
+}
+else
+{
+    builder.Services.AddSingleton<IDocumentExtractor, StubDocumentExtractor>();
+}
 builder.Services.AddSingleton<IRulesEvaluator, DefaultRulesEvaluator>();
 builder.Services.AddSingleton(TimeProvider.System);
 
