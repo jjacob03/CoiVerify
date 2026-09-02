@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Threading.RateLimiting;
 using CoiVerify.Api;
 using CoiVerify.Domain;
 using CoiVerify.Infrastructure;
@@ -97,7 +98,27 @@ else
 builder.Services.AddSingleton<IRulesEvaluator, DefaultRulesEvaluator>();
 builder.Services.AddSingleton(TimeProvider.System);
 
+// Each /parse and /validate call costs real money (Document Intelligence + LLM), so
+// each API key gets its own 20-requests-per-minute budget - stops a stray script or a
+// leaked key from running up an unbounded bill. Partitioned by the raw header value,
+// not the validated key, so it runs ahead of ApiKeyAuthFilter and a flood of invalid
+// keys can't dodge the limiter either.
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy("PerApiKey", httpContext => RateLimitPartition.GetFixedWindowLimiter(
+        partitionKey: httpContext.Request.Headers["X-Api-Key"].ToString(),
+        factory: _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 20,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0
+        }));
+});
+
 var app = builder.Build();
+
+app.UseRateLimiter();
 
 app.MapGet("/", () => Results.Content(LandingPageHtml, "text/html"));
 
@@ -120,7 +141,8 @@ app.MapPost("/parse", async (IFormFile? file, IDocumentExtractor extractor, Canc
         : Results.UnprocessableEntity(result);
 })
 .DisableAntiforgery()
-.AddEndpointFilter<ApiKeyAuthFilter>();
+.AddEndpointFilter<ApiKeyAuthFilter>()
+.RequireRateLimiting("PerApiKey");
 
 // --- POST /validate ------------------------------------------------------------------
 // multipart/form-data with a "file" field plus a "rules" field containing a
@@ -177,6 +199,7 @@ app.MapPost("/validate", async (
     return Results.Ok(new { extraction, validation });
 })
 .DisableAntiforgery()
-.AddEndpointFilter<ApiKeyAuthFilter>();
+.AddEndpointFilter<ApiKeyAuthFilter>()
+.RequireRateLimiting("PerApiKey");
 
 app.Run();
